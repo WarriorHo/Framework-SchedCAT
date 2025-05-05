@@ -23,40 +23,52 @@ def suspension_jitter(task):
     else:
         return get_jitter(task)
 
-def _calculate_total_execution_time(task, delta):
-    return task.cost + get_syscall_count(task) * delta
+# def _calculate_total_execution_time(task, delta):
+#     return task.cost + get_syscall_count(task) * delta
 
 def _rta_omnilog(task, own_demand, higher_prio_tasks, hp_jitter, delta):
-    # Initial guess: own demand plus sum of higher-prio costs
     total_demand = sum(t.cost for t in higher_prio_tasks) + own_demand
     while total_demand <= task.deadline:
         demand = own_demand
         for t in higher_prio_tasks:
             demand += t.cost * int(ceil((total_demand + hp_jitter(t)) / t.period))
         if demand == total_demand:
-            # Demand met, set response time and return success
             task.response_time = total_demand + get_jitter(task)
             return True
         else:
-            # Update demand and continue
             total_demand = demand
-    # No convergence within deadline
     return False
 
+# def rta_omnilog_jitter_aware(task, higher_prio_tasks, delta):
+#     own_demand = get_prio_inversion(task) + _calculate_total_execution_time(task, delta)
+#     return _rta_omnilog(task, own_demand, higher_prio_tasks, get_jitter, delta)
+
 def rta_omnilog_jitter_aware(task, higher_prio_tasks, delta):
-    own_demand = get_prio_inversion(task) + _calculate_total_execution_time(task, delta)
+    own_demand = get_prio_inversion(task) + task.cost
     return _rta_omnilog(task, own_demand, higher_prio_tasks, get_jitter, delta)
 
+# def rta_omnilog_suspension_aware(task, higher_prio_tasks, delta):
+#     own_demand = get_prio_inversion(task) + _calculate_total_execution_time(task, delta) + get_suspended(task)
+#     return _rta_omnilog(task, own_demand, higher_prio_tasks, suspension_jitter, delta)
+
 def rta_omnilog_suspension_aware(task, higher_prio_tasks, delta):
-    own_demand = get_prio_inversion(task) + _calculate_total_execution_time(task, delta) + get_suspended(task)
+    own_demand = get_prio_inversion(task) + task.cost + get_suspended(task)
     return _rta_omnilog(task, own_demand, higher_prio_tasks, suspension_jitter, delta)
 
+# def legacy_rta_omnilog_jitter_aware(task, higher_prio_tasks, delta):
+#     own_demand = get_blocked(task) + _calculate_total_execution_time(task, delta)
+#     return _rta_omnilog(task, own_demand, higher_prio_tasks, get_jitter)
+
 def legacy_rta_omnilog_jitter_aware(task, higher_prio_tasks, delta):
-    own_demand = get_blocked(task) + _calculate_total_execution_time(task, delta)
+    own_demand = get_blocked(task) + task.cost
     return _rta_omnilog(task, own_demand, higher_prio_tasks, get_jitter)
 
+# def legacy_rta_suspension_aware(task, higher_prio_tasks, delta):
+#     own_demand = get_blocked(task) + _calculate_total_execution_time(task, delta)
+#     return _rta_omnilog(task, own_demand, higher_prio_tasks, suspension_jitter)
+
 def legacy_rta_suspension_aware(task, higher_prio_tasks, delta):
-    own_demand = get_blocked(task) + _calculate_total_execution_time(task, delta)
+    own_demand = get_blocked(task) + task.cost
     return _rta_omnilog(task, own_demand, higher_prio_tasks, suspension_jitter)
 
 def has_self_suspensions(taskset):
@@ -81,6 +93,53 @@ def bound_response_times_omnilog(no_cpus, taskset, delta):
     
     for i, task in enumerate(taskset):
         if not rta(task, taskset[0:i], delta):
+            return False
+    return True
+
+def bound_response_times_omnilog(num_cpus, tasks, delta, beta):
+    tasks.sort(key=lambda t: t.preemption_level)
+    consumer = next(t for t in tasks if t.is_consumer)
+    q_sigma = consumer.period
+    
+    for t in tasks:
+        t.response_time = 0
+    
+    def S(W):
+        total_syscalls = 0
+        for t in tasks:
+            if not t.is_consumer:
+                total_syscalls += ceil((W + t.response_time) / t.period) * t.syscall_count
+        return total_syscalls
+    
+    converged = False
+    while not converged:
+        converged = True
+        prev_r_sigma = consumer.response_time
+        A_star = S(q_sigma + prev_r_sigma)
+        consumer_cost = beta * A_star
+        consumer.response_time = consumer_cost
+        if consumer.response_time != prev_r_sigma:
+            converged = False
+        
+        for task in tasks:
+            if not task.is_consumer:
+                E_i = task.cost
+                b_i = 0
+                interference = 0
+
+                for t in tasks:
+                    if t.preemption_level < task.preemption_level and not t.is_consumer:
+                        interference += ceil(task.response_time / t.period) * t.cost
+                
+                A_star = S(q_sigma + consumer.response_time)
+                I_sigma_i = ceil(task.response_time / q_sigma) * beta * A_star
+                new_r_i = E_i + b_i + interference + I_sigma_i
+                if new_r_i != task.response_time:
+                    task.response_time = new_r_i
+                    converged = False
+    
+    for t in tasks:
+        if not t.is_consumer and t.response_time > t.deadline:
             return False
     return True
 
