@@ -25,6 +25,7 @@ def assign_fp_preemption_levels(all_tasks):
 
 def generate_task_set(conf):
     ts = TaskSystem()
+    
     for cpuid in range(int(conf.num_cpus)):
         ntask = int(conf.num_task)
         u = float(conf.util)
@@ -34,26 +35,22 @@ def generate_task_set(conf):
             user_task.syscall_count = 200
             user_task.is_consumer = False
             ts.append(user_task)
-            
-            consumer = SporadicTask(0, conf.consumer_period_factor * user_task.period, conf.consumer_period_factor * user_task.period)
-            consumer.syscall_count = conf.consumer_syscall_count
-            consumer.is_consumer = True
-            consumer.partition = cpuid
-            ts.append(consumer)
     
-    ts.sort_by_period()
+    user_ts = TaskSystem([t for t in ts if not t.is_consumer])
+    user_ts.sort_by_period()
+    for i, t in enumerate(user_ts):
+        t.preemption_level = float(i)
+    
+    for user_task in user_ts:
+        consumer = SporadicTask(0, conf.consumer_period_factor * user_task.period, conf.consumer_period_factor * user_task.period)
+        consumer.syscall_count = conf.consumer_syscall_count
+        consumer.is_consumer = True
+        consumer.partition = user_task.partition
+        consumer.preemption_level = user_task.preemption_level - 0.5
+        ts.append(consumer)
+    
+    ts.sort(key=lambda t: t.preemption_level)
     ts.assign_ids()
-    assign_fp_preemption_levels(ts)
-
-    for user_task in [t for t in ts if not t.is_consumer]:
-        consumer = next(c for c in ts if c.is_consumer and c.partition == user_task.partition)
-        higher_prio_users = [t for t in ts if t.partition == user_task.partition and 
-                             t.preemption_level < user_task.preemption_level and not t.is_consumer]
-        if higher_prio_users:
-            min_higher_prio = min(higher_prio_users, key=lambda t: t.preemption_level).preemption_level
-            consumer.preemption_level = (min_higher_prio + user_task.preemption_level) / 2
-        else:
-            consumer.preemption_level = user_task.preemption_level - 0.5
     
     return ts
 
