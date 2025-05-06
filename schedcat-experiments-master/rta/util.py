@@ -167,7 +167,7 @@ if __name__ == "__main__":
     class Conf:
         def __init__(self):
             self.experiment = 'util_num'
-            self.output = 'output/util_sched_rewrite_omnilog.txt'
+            self.output = 'output/util_sched_rewrite_omnilog_n=1024.txt'
             self.num_task = 10
             self.samples = 5000
             self.periods = '10-100'
@@ -178,7 +178,7 @@ if __name__ == "__main__":
             # self.delta = 0.1
             # self.alpha = 0.2
             # self.beta = 0.05
-            self.consumer_period_factor = 1.0
+            self.consumer_period_factor = 1024.0
             self.consumer_syscall_count = 200
 
     conf = Conf()
