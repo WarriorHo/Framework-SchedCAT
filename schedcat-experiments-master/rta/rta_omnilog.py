@@ -97,10 +97,20 @@ def bound_response_times_omnilog(no_cpus, taskset, delta):
     return True
 
 def bound_response_times_omnilog(num_cpus, tasks, delta, beta):
+    """Debug print for omnilog response time convergence."""
+    # Sort tasks by preemption level
     tasks.sort(key=lambda t: t.preemption_level)
+    # Identify the consumer task
     consumer = next(t for t in tasks if t.is_consumer)
-    q_sigma = consumer.period
     
+    # add if consumer
+    if consumer is None:
+        print("No consumer task found for debug.")
+        return
+    
+    q_sigma = consumer.period
+    print("\nq_sigma {}: ".format(q_sigma))
+
     for t in tasks:
         t.response_time = 0
     
@@ -108,16 +118,36 @@ def bound_response_times_omnilog(num_cpus, tasks, delta, beta):
         total_syscalls = 0
         for t in tasks:
             if not t.is_consumer:
-                total_syscalls += ceil((W + t.response_time) / t.period) * t.syscall_count
+                total_syscalls += ceil(float(W + t.response_time) / t.period) * t.syscall_count
         return total_syscalls
     
+    # add iteration
+    iteration = 0
+
     converged = False
     while not converged:
+
+        # add interation
+        iteration += 1
+        print("\nIteration {}: ".format(iteration))
+
         converged = True
         prev_r_sigma = consumer.response_time
+
+        # add prev_r_sigma
+        print("\nprev_r_sigma {}: ".format(prev_r_sigma))
+
         A_star = S(q_sigma + prev_r_sigma)
+        
+        # add print
+        print("\nA_star {}:".format(A_star))
+
         consumer_cost = beta * A_star
         consumer.response_time = consumer_cost
+        
+        # add print
+        print("  r_sigma: {:.2f}".format(consumer.response_time))
+        
         if consumer.response_time != prev_r_sigma:
             converged = False
         
@@ -129,14 +159,21 @@ def bound_response_times_omnilog(num_cpus, tasks, delta, beta):
 
                 for t in tasks:
                     if t.preemption_level < task.preemption_level and not t.is_consumer:
-                        interference += ceil(task.response_time / t.period) * t.cost
+                        interference += ceil(float(task.response_time) / t.period) * t.cost
                 
                 A_star = S(q_sigma + consumer.response_time)
-                I_sigma_i = ceil(task.response_time / q_sigma) * beta * A_star
+                I_sigma_i = ceil(float(task.response_time) / q_sigma) * beta * A_star
+                
+                # add I_sigma_i
+                print("  I_sigma_i: {:.2f}".format(I_sigma_i))
+                
                 new_r_i = E_i + b_i + interference + I_sigma_i
                 if new_r_i != task.response_time:
                     task.response_time = new_r_i
                     converged = False
+
+                # add print
+                print("  r_{}: {:.2f}".format(task.period, task.response_time))
     
     for t in tasks:
         if not t.is_consumer and t.response_time > t.deadline:

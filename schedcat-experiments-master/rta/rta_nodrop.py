@@ -59,14 +59,35 @@ def _rta_nodrop(task, higher_prio_tasks, delta, alpha, beta):
     b_i = get_prio_inversion(task)
     r = E_i + b_i + sum(t.cost for t in higher_prio_regular)
     
+    # add iteration
+    iteration = 0
+
     while True:
-        interference_regular = sum(ceil(r / t.period) * t.cost for t in higher_prio_regular)
-        interference_consumer = sum(ceil(r / c.period) * c.cost for c in higher_prio_consumers)
+
+        # add interation
+        iteration += 1
+        print("\n _rta_nodrop Task {} Iteration {}: ".format(task.id, iteration))
+        print("  r_old: {:.2f}".format(r))
+
+        interference_regular = sum(ceil(float(r) / t.period) * t.cost for t in higher_prio_regular)
+        # add print
+        print("  interference_regular: {:.2f}".format(interference_regular))
+
+        interference_consumer = sum(ceil(float(r) / c.period) * c.cost for c in higher_prio_consumers)
+        # add print
+        print("  interference_consumer: {:.2f}".format(interference_consumer))
+        
         demand = E_i + b_i + interference_regular + interference_consumer
+        # add print
+        print("  demand: {:.2f}".format(demand))
+        
         if demand <= r:
             task.response_time = r
+            # add print
+            print("  converged r: {:.2f}".format(r))
             return r <= task.deadline
         elif r > task.deadline:
+            print("  missed deadline: r ({:.2f}) > deadline ({})".format(r, task.deadline))
             return False
         else:
             r = demand
@@ -92,14 +113,28 @@ def _event_residence_time_nodrop(task, higher_prio_tasks, delta, alpha, beta):
             T_p = demand
     R_i = T_w + T_p
     
-    return R_i, R_i <= task.deadline
+    # return R_i, R_i <= task.deadline
+    return R_i
 
 
 def bound_response_times_nodrop(tasks, delta, alpha, beta):
     tasks.sort(key=get_priority)
     for i, task in enumerate(tasks):
-        if not _rta_nodrop(task, tasks[:i], delta, alpha, beta):
+        
+        # add print
+        print("\n Nodrop on Task {} (priority {}):".format(task.id, get_priority(task)))
+        higher = tasks[:i]
+        print("  Higher-prio tasks: {}".format([t.id for t in higher]))
+        
+        # add print
+        schedulable = _rta_nodrop(task, higher, delta, alpha, beta)
+        print("  Task {} schedulable: {}\n".format(task.id, schedulable))
+        if not schedulable:
             return False
+
+        # if not _rta_nodrop(task, tasks[:i], delta, alpha, beta):
+            # return False
+
     return True
 
 def is_schedulable_with_nodrop(tasks, num_processors, delta, alpha, beta, qk_ratio=1.0):
