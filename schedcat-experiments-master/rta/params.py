@@ -16,13 +16,16 @@ class AuditFramework:
             if task.is_consumer:
                 return 0
             else:
+                print("\n omnilog execution time {}: ".format(task.cost + task.syscall_count * self.delta))
                 return task.cost + task.syscall_count * self.delta
         elif self.name == 'nodrop':
             if self.delta is None or self.alpha is None or self.beta is None:
                 raise ValueError("Delta, alpha, and beta parameters required for nodrop framework")
             if task.is_consumer:
+                print("\n nodrop consumer execution time {}: ".format(self.alpha + task.syscall_count * self.beta))
                 return self.alpha + task.syscall_count * self.beta
             else:
+                print("\n nodrop user execution time {}: ".format(task.cost + task.syscall_count * self.delta))
                 return task.cost + task.syscall_count * self.delta
         else:
             raise ValueError("Unknown framework: {}".format(self.name))
