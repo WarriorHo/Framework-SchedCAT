@@ -39,12 +39,13 @@ def print_task_set(ts):
     for task in ts:
         task_type = "Consumer" if getattr(task, 'is_consumer', False) else "User"
         preemption_level = getattr(task, 'preemption_level', '')
-        print("{:<5} {:<10} {:<5} {:<10} {:<20}".format(
+        print("{:<5} {:<10} {:<5} {:<10} {:<20} {:<5}".format(
             task.id,
             task_type,
             task.partition,
             task.period,
-            preemption_level
+            preemption_level,
+            task.cost
         ))
     print("\n")
 
@@ -85,7 +86,7 @@ def generate_task_set(conf):
     ts.assign_ids()
     
     # add check
-    print_task_set(ts)
+    # print_task_set(ts)
 
     return ts
 
@@ -99,7 +100,7 @@ def iter_partitions_ts(taskset):
         yield TaskSystem(p)
 
 def rta_test(taskset, oh, conf, include_consumers=False):
-    ts = TaskSystem(taskset)
+    ts = copy.deepcopy(taskset)
     if not include_consumers:
         ts = TaskSystem([t for t in ts if not t.is_consumer])
     framework = get_framework('rta')
@@ -113,7 +114,7 @@ def rta_test(taskset, oh, conf, include_consumers=False):
     return (1, 0)
 
 def rta_omnilog_test(taskset, oh, conf, include_consumers=False):
-    ts = TaskSystem(taskset)
+    ts = copy.deepcopy(taskset)
     if not include_consumers:
         ts = TaskSystem([t for t in ts if not t.is_consumer])
     framework = get_framework('omnilog')
@@ -138,7 +139,7 @@ def rta_omnilog_test(taskset, oh, conf, include_consumers=False):
     return (1, 0)
 
 def rta_nodrop_test(taskset, oh, conf, include_consumers=True):
-    ts = TaskSystem(taskset)
+    ts = copy.deepcopy(taskset)
     if not include_consumers:
         ts = TaskSystem([t for t in ts if not t.is_consumer])
     framework = get_framework('nodrop')
@@ -255,17 +256,17 @@ CONFIG_GENERATORS = {
 if __name__ == "__main__":
     class Conf:
         def __init__(self):
-            # self.experiment = 'util_num'
-            # self.experiment = 'syscall_count'
-            # self.experiment = 'cpu_num'
+            self.experiment = 'util_num'
+            self.experiment = 'syscall_count'
+            self.experiment = 'cpu_num'
             # self.output = 'output/test_util_add_cpu_syscall.txt'
-            self.num_task = 3
-            self.samples = 2
+            self.num_task = 8
+            self.samples = 100
             self.periods = '10-100'
             self.num_cpus = 1
 
-            self.util_num_min = 0.8
-            self.util_num_max = 0.8
+            self.util_num_min = 0.5
+            self.util_num_max = 1.0
             self.step = 0.01
             
             self.consumer_period_factor = 1.0
