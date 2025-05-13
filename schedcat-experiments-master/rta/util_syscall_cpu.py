@@ -34,18 +34,19 @@ class RedirectStdoutToFile(object):
 def print_task_set(ts):
     """Print detailed information of the task set."""
     print("Task Set Details:")
-    print("{:<5} {:<10} {:<5} {:<10} {:<20}".format('ID', 'Type', 'CPU', 'Period', 'Preemption Level'))
+    print("{:<5} {:<10} {:<5} {:<10} {:<20}".format('ID', 'Type', 'CPU', 'Period', 'Preemption Level', 'Cost', 'Syscall count'))
     print("-" * 60)
     for task in ts:
         task_type = "Consumer" if getattr(task, 'is_consumer', False) else "User"
         preemption_level = getattr(task, 'preemption_level', '')
-        print("{:<5} {:<10} {:<5} {:<10} {:<20} {:<5}".format(
+        print("{:<5} {:<10} {:<5} {:<10} {:<20} {:<5} {:<5}".format(
             task.id,
             task_type,
             task.partition,
             task.period,
             preemption_level,
-            task.cost
+            task.cost,
+            task.syscall_count
         ))
     print("\n")
 
@@ -119,23 +120,33 @@ def rta_omnilog_test(taskset, oh, conf, include_consumers=False):
         ts = TaskSystem([t for t in ts if not t.is_consumer])
     framework = get_framework('omnilog')
     
-    for partition in iter_partitions_ts(ts):
-        part_ts = TaskSystem(partition)
-        if part_ts:
-            min_period_task = min(part_ts, key=lambda t: t.period)
-            q_sigma = min_period_task.period
-        else:
-            continue
-        consumer = SporadicTask(0, q_sigma, q_sigma)
-        consumer.is_consumer = True
-        consumer.preemption_level = -1
-        consumer.partition = part_ts[0].partition
-        part_ts.append(consumer)
-        for t in part_ts:
-            t.cost = framework.calculate_execution_time(t)
-        if not bound_response_times_omnilog(1, part_ts, framework.delta, framework.beta):
-            return (0, 0)
+    consumer_cpu = 0
+    non_consumer_tasks = [t for t in ts if not t.is_consumer]
+    if non_consumer_tasks:
+        q_sigma = min(t.period for t in non_consumer_tasks)
+    else:
+        return (0, 0)
     
+    consumer = SporadicTask(0, q_sigma, q_sigma)
+    consumer.is_consumer = True
+    consumer.preemption_level = -1
+    consumer.partition = consumer_cpu
+    ts.append(consumer)
+    
+    for t in ts:
+        t.cost = framework.calculate_execution_time(t)
+    
+    # for partition in iter_partitions_ts(ts):
+    #     part_ts = TaskSystem(partition)
+    #     if not bound_response_times_omnilog(1, part_ts, framework.delta, framework.beta):
+    #         return (0, 0)
+    
+    # if not bound_response_times_omnilog(conf.num_cpus, ts, framework.delta, framework.beta) :
+    #     return (0, 0)
+
+    if not bound_response_times_omnilog(consumer_cpu, ts, framework.delta, framework.beta) :
+        return (0, 0)
+
     return (1, 0)
 
 def rta_nodrop_test(taskset, oh, conf, include_consumers=True):
@@ -188,7 +199,7 @@ def run_util_num_config(conf):
     data = run_tests(confs, tests, oh)
     completed_time = time.time()
     # write_util_data(conf.output, data, header, conf, start_time, completed_time)
-    write_util_data('output/util_syscall_cpu/util_1.txt', data, header, conf, start_time, completed_time)
+    write_util_data('output/util_syscall_cpu/util_2.txt', data, header, conf, start_time, completed_time)
 
 def run_syscall_count_config(conf):
     start_time = time.time()
@@ -204,7 +215,7 @@ def run_syscall_count_config(conf):
     header = ['SYSCALL_COUNT'] + [t for t, _ in tests]
     data = run_tests(confs, tests, oh)
     completed_time = time.time()
-    write_util_data('output/util_syscall_cpu/syscall_count_1.txt', data, header, conf, start_time, completed_time)
+    write_util_data('output/util_syscall_cpu/syscall_count_2.txt', data, header, conf, start_time, completed_time)
 
 def run_cpu_num_config(conf):
     start_time = time.time()
@@ -220,7 +231,7 @@ def run_cpu_num_config(conf):
     header = ['CPU_NUMBER'] + [t for t, _ in tests]
     data = run_tests(confs, tests, oh)
     completed_time = time.time()
-    write_util_data('output/util_syscall_cpu/cpu_num_1.txt', data, header, conf, start_time, completed_time)
+    write_util_data('output/util_syscall_cpu/cpu_num_2.txt', data, header, conf, start_time, completed_time)
 
 def write_util_data(output_file, data, header, conf, start_time, completed_time):
     output_dir = os.path.dirname(output_file)
@@ -256,12 +267,12 @@ CONFIG_GENERATORS = {
 if __name__ == "__main__":
     class Conf:
         def __init__(self):
-            self.experiment = 'util_num'
-            self.experiment = 'syscall_count'
+            # self.experiment = 'util_num'
+            # self.experiment = 'syscall_count'
             self.experiment = 'cpu_num'
             # self.output = 'output/test_util_add_cpu_syscall.txt'
-            self.num_task = 8
-            self.samples = 100
+            self.num_task = 10
+            self.samples = 5000
             self.periods = '10-100'
             self.num_cpus = 1
 
@@ -284,7 +295,7 @@ if __name__ == "__main__":
 
     conf = Conf()
     
-    for experiment in ['util_num', 'syscall_count', 'cpu_num']:
-        conf.experiment = experiment
-        EXPERIMENTS[experiment](conf)
-    # EXPERIMENTS[conf.experiment](conf)
+    # for experiment in ['util_num', 'syscall_count', 'cpu_num']:
+    #     conf.experiment = experiment
+    #     EXPERIMENTS[experiment](conf)
+    EXPERIMENTS[conf.experiment](conf)
